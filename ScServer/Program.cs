@@ -17,11 +17,16 @@ namespace ScServer
             Log.SetLoggerFactory(new LoggerFactory()
                 .AddDebug(LogLevel.Debug));
 
+            //register the our known messages
             Serialization.RegisterFileDescriptor(ProtosReflection.Descriptor);
 
-
+            //start the Proto.Actor remote server on 127.0.0.1:12000
             Remote.Start("127.0.0.1", 12000);
+
+            //define an actor of type HelloActor
             var props = FromProducer(() => new HelloActor(Log.CreateLogger("HelloActor")));
+
+            //create an instance of our definition, name the actor HelloActor, this is the name we can use to reach it remote
             var helloPid = SpawnNamed(props, "HelloActor");
 
             //REST to Actor comunication:
@@ -57,14 +62,20 @@ namespace ScServer
                     _logger.LogDebug("Hello Actor started");
                     break;
                 case HelloRequest _:
+                    //offload the message handling for this message to the Starcounter scheduler
                     return Scheduling.RunTask(() =>
                     {
                         _logger.LogDebug($"Hello Actor got request from {context.Sender.ToShortString()}");
                         Db.Transact(() =>
                         {
+
+                            //get or create an instance of HelloState
                             var state = Db.SQL<HelloState>("SELECT s from ScServer.HelloState s").FirstOrDefault() ?? new HelloState();
 
+                            //increate hello count
                             state.HelloCount++;
+
+                            //respond back to the sender of the current message
                             context.Respond(new HelloResponse
                             {
                                 Message = $"You have said hello {state.HelloCount} times!"
