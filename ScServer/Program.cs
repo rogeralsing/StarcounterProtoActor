@@ -1,5 +1,4 @@
-﻿using System.Diagnostics;
-using System.Linq;
+﻿using System.Linq;
 using System.Threading.Tasks;
 using Messages;
 using Microsoft.Extensions.Logging;
@@ -7,6 +6,7 @@ using Proto;
 using Proto.Remote;
 using Starcounter;
 using static Proto.Actor;
+using ProtosReflection = Messages.ProtosReflection;
 
 namespace ScServer
 {
@@ -17,11 +17,11 @@ namespace ScServer
             Log.SetLoggerFactory(new LoggerFactory()
                 .AddDebug(LogLevel.Debug));
 
-            Serialization.RegisterFileDescriptor(Messages.ProtosReflection.Descriptor);
+            Serialization.RegisterFileDescriptor(ProtosReflection.Descriptor);
 
 
             Remote.Start("127.0.0.1", 12000);
-            var props = FromProducer(() => new HelloActor());
+            var props = FromProducer(() => new HelloActor(Log.CreateLogger("HelloActor")));
             var helloPid = SpawnNamed(props, "HelloActor");
 
             //REST to Actor comunication:
@@ -42,21 +42,27 @@ namespace ScServer
 
     public class HelloActor : IActor
     {
+        private readonly ILogger _logger;
+
+        public HelloActor(ILogger logger)
+        {
+            _logger = logger;
+        }
+
         public Task ReceiveAsync(IContext context)
         {
             switch (context.Message)
             {
                 case Started _:
-                    Trace.WriteLine("Hello Actor started");
+                    _logger.LogDebug("Hello Actor started");
                     break;
                 case HelloRequest _:
                     return Scheduling.RunTask(() =>
                     {
-                        Trace.WriteLine($"Hello Actor got request from {context.Sender.ToShortString()}");
+                        _logger.LogDebug($"Hello Actor got request from {context.Sender.ToShortString()}");
                         Db.Transact(() =>
                         {
-                            var state = Db.SQL<HelloState>("SELECT s from ScServer.HelloState s")
-                                            .FirstOrDefault() ?? new HelloState();
+                            var state = Db.SQL<HelloState>("SELECT s from ScServer.HelloState s").FirstOrDefault() ?? new HelloState();
 
                             state.HelloCount++;
                             context.Respond(new HelloResponse
